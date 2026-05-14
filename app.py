@@ -25,6 +25,24 @@ if 'selected_symbol' not in st.session_state:
     st.session_state.selected_symbol = None
 if 'detected_symbols' not in st.session_state:
     st.session_state.detected_symbols = []
+if 'confidence_threshold' not in st.session_state:
+    st.session_state.confidence_threshold = 0.7
+if 'min_match_distance' not in st.session_state:
+    st.session_state.min_match_distance = 30
+if 'dpi' not in st.session_state:
+    st.session_state.dpi = 250
+
+# Cache PDF rendering to avoid re-rendering on every interaction
+@st.cache_data
+def render_pdf_page(pdf_path: str, page_num: int, dpi: int) -> any:
+    """
+    Cached PDF page rendering.
+    Cache key: (pdf_path, page_num, dpi)
+    """
+    loader = PDFLoader(pdf_path, dpi=dpi)
+    image = loader.render_page(page_num)
+    loader.close()
+    return image
 
 # Sidebar controls
 with st.sidebar:
@@ -43,14 +61,14 @@ with st.sidebar:
         with open(pdf_path, "wb") as f:
             f.write(uploaded_file.read())
         
-        # Load PDF
-        pdf_loader = PDFLoader(pdf_path)
+        # Load PDF metadata only
+        loader = PDFLoader(pdf_path, dpi=st.session_state.dpi)
         st.session_state.pdf_data = {
-            'loader': pdf_loader,
             'path': pdf_path,
-            'page_count': pdf_loader.page_count
+            'page_count': loader.page_count
         }
-        st.success(f"✅ PDF loaded: {pdf_loader.page_count} pages")
+        loader.close()
+        st.success(f"✅ PDF loaded: {st.session_state.pdf_data['page_count']} pages")
     
     st.markdown("---")
     
@@ -70,21 +88,34 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("🔧 Takeoff Settings")
         
-        confidence = st.slider(
+        # DPI selector
+        st.session_state.dpi = st.slider(
+            "PDF Rendering DPI",
+            min_value=150,
+            max_value=300,
+            value=250,
+            step=25,
+            help="Higher DPI = better symbol accuracy but slower rendering"
+        )
+        
+        # Confidence threshold
+        st.session_state.confidence_threshold = st.slider(
             "Template matching confidence",
             min_value=0.0,
             max_value=1.0,
             value=0.7,
             step=0.05,
-            help="Lower = more matches, Higher = fewer, more confident matches"
+            help="Lower = more matches (more false positives), Higher = fewer matches (more strict)"
         )
         
-        min_distance = st.slider(
+        # Min distance between matches
+        st.session_state.min_match_distance = st.slider(
             "Minimum distance between matches (pixels)",
             min_value=5,
             max_value=100,
             value=30,
-            step=5
+            step=5,
+            help="Prevents duplicate detections of the same symbol"
         )
 
 # Main content area
@@ -94,11 +125,16 @@ if st.session_state.pdf_data:
     with col1:
         st.subheader("🖼️ Drawing Viewer")
         
-        # Render current page
-        pdf_loader = st.session_state.pdf_data['loader']
-        image = pdf_loader.render_page(st.session_state.current_page)
-        
-        st.image(image, use_column_width=True, caption=f"Page {st.session_state.current_page + 1}")
+        # Render current page with caching
+        try:
+            image = render_pdf_page(
+                st.session_state.pdf_data['path'],
+                st.session_state.current_page,
+                st.session_state.dpi
+            )
+            st.image(image, use_column_width=True, caption=f"Page {st.session_state.current_page + 1}")
+        except Exception as e:
+            st.error(f"❌ Error rendering page: {str(e)}")
     
     with col2:
         st.subheader("📊 Takeoff Summary")
@@ -112,9 +148,17 @@ if st.session_state.pdf_data:
             # Display detected symbols
             st.markdown("**Detections:**")
             for i, symbol in enumerate(st.session_state.detected_symbols, 1):
-                st.caption(f"{i}. Confidence: {symbol['confidence']:.2%}")
+                st.caption(f"{i}. Confidence: {symbol['confidence']:.1%}")
         else:
             st.info("👀 No symbols detected yet.\n\nSelect a symbol from the legend to begin.")
+        
+        st.markdown("---")
+        
+        # Settings info
+        st.markdown("**Current Settings:**")
+        st.caption(f"🎯 Confidence: {st.session_state.confidence_threshold:.2f}")
+        st.caption(f"📏 Min Distance: {st.session_state.min_match_distance}px")
+        st.caption(f"🔍 DPI: {st.session_state.dpi}")
         
         if st.button("📥 Export to CSV", use_container_width=True):
             st.success("✅ CSV export functionality coming in Phase 4!")
@@ -125,11 +169,12 @@ else:
     st.markdown("---")
     st.subheader("📖 How to use drawing-takeoff")
     
-    with st.expander("**Phase 1: PDF Upload & Viewer**"):
+    with st.expander("**Phase 1: PDF Upload & Viewer** ✅ Current"):
         st.markdown("""
         1. **Upload a PDF** - Select a construction drawing
         2. **Navigate pages** - Use the slider to view different pages
-        3. **View drawing** - See the rendered drawing in the main area
+        3. **Adjust DPI** - Higher DPI improves symbol detection accuracy
+        4. **View drawing** - See the rendered drawing in the main area
         """)
     
     with st.expander("**Phase 2: Symbol Selection (Coming Soon)**"):
