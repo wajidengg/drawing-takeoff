@@ -1,4 +1,3 @@
-````markdown
 # PROJECT_ROADMAP.md
 
 # drawing-takeoff
@@ -646,6 +645,3 @@ Current development focus:
 * quantity takeoff automation
 
 Not production-ready.
-
-```
-```
