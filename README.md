@@ -1,6 +1,9 @@
 # drawing-takeoff
 
-PDF-based construction drawing takeoff tool for detecting, identifying, and counting symbols from MEP and architectural drawings.
+PDF-based construction drawing takeoff tool for detecting, identifying, and counting symbols from MEP and architectural drawings.  
+
+## Drawing Takeoff App
+🚀 Live Demo: [Open App](https://drawing-takeoff-w.streamlit.app)
 
 ---
 
